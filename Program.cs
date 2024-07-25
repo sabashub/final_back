@@ -7,7 +7,7 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add CORS policy
+
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(builder =>
@@ -18,7 +18,7 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Add services to the container
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(option =>
@@ -33,7 +33,7 @@ builder.Services.AddSwaggerGen(option =>
     option.OperationFilter<SecurityRequirementsOperationFilter>();
 });
 
-// Add JWT authentication
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -46,7 +46,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-// Register DatabaseHelper as a scoped service
+
 builder.Services.AddScoped<Pkg_users>(provider =>
     new Pkg_users(builder.Configuration.GetConnectionString("OrclConnStr")));
 
@@ -54,7 +54,7 @@ builder.Services.AddScoped<ITokenService, TokenService>();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline
+
 if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();
@@ -64,8 +64,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-// Enable CORS
-app.UseCors();  // Make sure CORS is applied before authentication and authorization
+app.UseCors();  
 
 app.UseAuthentication();
 app.UseAuthorization();

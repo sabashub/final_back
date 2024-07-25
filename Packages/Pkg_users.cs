@@ -1,11 +1,13 @@
 ﻿using final_backend.Models;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Oracle.ManagedDataAccess.Client;
+using System;
 using System.Data;
 using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Result = final_backend.Models.Result;
 
 namespace final_backend.Packages
 {
@@ -40,10 +42,10 @@ namespace final_backend.Packages
                 {
                     command.CommandType = CommandType.StoredProcedure;
 
-                    // Hash the password before storing it
+                   
                     string hashedPassword = HashPassword(user.Password);
 
-                    // Add parameters
+                   
                     command.Parameters.Add("p_username", OracleDbType.Varchar2).Value = user.UserName;
                     command.Parameters.Add("p_email", OracleDbType.Varchar2).Value = user.Name;
                     command.Parameters.Add("p_password", OracleDbType.Varchar2).Value = hashedPassword;
@@ -167,16 +169,17 @@ namespace final_backend.Packages
             return user;
         }
 
-        public List<Answers> GetAnswers()
+        public List<Result> GetResults(int userId)
         {
-            List<Answers> answers = new List<Answers>();
+            var results = new List<Result>();
 
             using (var connection = GetConnection())
             {
                 connection.Open();
-                using (var command = new OracleCommand("PKG_SABA_QUESTIONS_AND_ANSWERS.get_answer_with_user", connection))
+                using (var command = new OracleCommand("PKG_SABA_QUESTIONS_AND_ANSWERS.get_result", connection))
                 {
                     command.CommandType = CommandType.StoredProcedure;
+                    command.Parameters.Add("p_id", OracleDbType.Int32).Value = userId;
 
                     OracleParameter cursorParameter = new OracleParameter();
                     cursorParameter.OracleDbType = OracleDbType.RefCursor;
@@ -187,54 +190,79 @@ namespace final_backend.Packages
                     {
                         while (reader.Read())
                         {
-                            var answer = new Answers
+                            results.Add(new Result
                             {
-                               
-                                name_surname = reader["NAME_SURNAME"].ToString(),
                                 question = reader["QUESTION"].ToString(),
                                 answer = reader["ANSWER"].ToString(),
-                            };
-                            answers.Add(answer);
+                                name_id = Convert.ToInt32(reader["NAME_ID"]),
+                            });
                         }
                     }
                 }
             }
 
-            return answers;
+            return results;
         }
-
-        public void AddAnswers(List<Answers> answers)
+        public List<Person> GetNames()
         {
-            try
+            var names = new List<Person>();
+
+            using (var connection = GetConnection())
             {
-                using (var connection = GetConnection())
+                connection.Open();
+                using (var command = new OracleCommand("PKG_SABA_QUESTIONS_AND_ANSWERS.get_names", connection))
                 {
-                    connection.Open();
-                    using (var command = new OracleCommand("PKG_SABA_QUESTIONS_AND_ANSWERS.add_answer", connection))
+                    command.CommandType = CommandType.StoredProcedure;
+
+                    // Define the output parameter for the cursor
+                    OracleParameter cursorParameter = new OracleParameter();
+                    cursorParameter.OracleDbType = OracleDbType.RefCursor;
+                    cursorParameter.Direction = ParameterDirection.Output;
+                    command.Parameters.Add(cursorParameter);
+
+                    using (var reader = command.ExecuteReader())
                     {
-                        command.CommandType = CommandType.StoredProcedure;
-
-                        // Serialize the questions list to a JSON string
-                        string answersJson = JsonSerializer.Serialize(answers);
-
-                        // Log the JSON string for verification
-                        Console.WriteLine(answersJson);
-
-                        // Add the JSON string as a CLOB parameter
-                        command.Parameters.Add("p_answer_json", OracleDbType.Clob).Value = answersJson;
-
-                        command.ExecuteNonQuery();
+                        while (reader.Read())
+                        {
+                            names.Add(new Person
+                            {
+                                Name = reader["NAME"].ToString(),
+                                Id = Convert.ToInt32(reader["ID"])
+                            });
+                        }
                     }
                 }
-
             }
-            catch (Exception e)
+
+            return names;
+        }
+
+        public void AddResult(string json)
+        {
+            using (var connection = GetConnection())
             {
-                throw new ApplicationException("Error adding questions", e);
+                connection.Open();
+                using (var command = new OracleCommand("PKG_SABA_QUESTIONS_AND_ANSWERS.add_result", connection))
+                {
+                    command.CommandType = CommandType.StoredProcedure;
+
+                    // Add the JSON parameter
+                    OracleParameter jsonParameter = new OracleParameter();
+                    jsonParameter.ParameterName = "p_json";
+                    jsonParameter.OracleDbType = OracleDbType.Clob;
+                    jsonParameter.Direction = ParameterDirection.Input;
+                    jsonParameter.Value = json;
+                    command.Parameters.Add(jsonParameter);
+
+                    // Execute the stored procedure
+                    command.ExecuteNonQuery();
+                }
             }
         }
-        public void AddQuestion(Questions question)
+        public List<Questions> AddQuestion(Questions question)
         {
+            var questionsList = new List<Questions>();
+
             using (var connection = GetConnection())
             {
                 connection.Open();
@@ -242,18 +270,36 @@ namespace final_backend.Packages
                 {
                     command.CommandType = CommandType.StoredProcedure;
 
-                  
-
-
                     // Add parameters
-                    command.Parameters.Add("P_question", OracleDbType.Varchar2).Value = question.Question;
+                    command.Parameters.Add("p_question", OracleDbType.Varchar2).Value = question.Question;
                     command.Parameters.Add("p_answer", OracleDbType.Varchar2).Value = question.Answer;
-                    command.Parameters.Add("p_mandatory", OracleDbType.Varchar2).Value = question.Mandatory;
-                    
+                    command.Parameters.Add("p_is_mandatory", OracleDbType.Int32).Value = question.Mandatory;
 
-                    command.ExecuteNonQuery();
+                    // Add cursor parameter
+                    OracleParameter cursorParameter = new OracleParameter();
+                    cursorParameter.OracleDbType = OracleDbType.RefCursor;
+                    cursorParameter.Direction = ParameterDirection.Output;
+                    command.Parameters.Add(cursorParameter);
+
+                    // Execute the command and process the cursor
+                    using (var reader = command.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            var q = new Questions
+                            {
+                                Id = Convert.ToInt32(reader["id"]),
+                                Question = reader["question"].ToString(),
+                                Answer = reader["answer"].ToString(),
+                                Mandatory = Convert.ToInt32(reader["mandatory"])
+                            };
+                            questionsList.Add(q);
+                        }
+                    }
                 }
             }
+
+            return questionsList;
         }
 
         public List<Questions> GetQuestions()

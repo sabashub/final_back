@@ -2,6 +2,8 @@
 using final_backend.Packages;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System.Numerics;
 using System.Security.Claims;
 
@@ -105,41 +107,72 @@ namespace final_backend.Controllers
 
 
 
-        [HttpGet("get_answers")]
-        public ActionResult<List<Answers>> GetAnswers()
+        [HttpGet("get_results/{id}")]
+        public ActionResult<List<Result>> GetAnswers(int id)
         {
-            var users = _pkg_users.GetAnswers();
-            return Ok(users);
-        }
-
-        [HttpPost("add_answers")]
-        public IActionResult AddAnswers([FromBody] List<Answers> answer)
-        {
-            if (answer == null)
+            var results = _pkg_users.GetResults(id);
+            if (results == null || !results.Any())
             {
-                return BadRequest("Employee data is null.");
+                return NotFound();
+            }
+            return Ok(results);
+        }
+        [HttpPost("add_result")]
+        public IActionResult AddResult([FromBody] AddResult request)
+        {
+            if (request == null || string.IsNullOrEmpty(request.name) || request.questionsAndAnswers == null || !request.questionsAndAnswers.Any())
+            {
+                return BadRequest(new { message = "Invalid JSON data." });
             }
 
+            // Convert to JSON string if needed or handle the data as per your logic
+            var json = JsonConvert.SerializeObject(request);
 
-            _pkg_users.AddAnswers(answer);
-            return Ok(new { message = "answers added succesfully.", answer });
-
-
+            try
+            {
+                // Call the ADO.NET function to execute the stored procedure
+                _pkg_users.AddResult(json);
+                return Ok(new { message = "Result added successfully." });
+            }
+            catch (Exception ex)
+            {
+                // Handle exceptions (e.g., log them)
+                return StatusCode(500, new { message = $"Internal server error: {ex.Message}" });
+            }
         }
+
 
         [HttpPost("add_question")]
         public IActionResult AddQuestion([FromBody] Questions question)
         {
             try
             {
-                _pkg_users.AddQuestion(question);
-                return Ok(new { message = "Question added  successfully" });
+                // Call the ADO.NET function to add the question and get the updated list
+                var questionsList = _pkg_users.AddQuestion(question);
+
+                return Ok(new
+                {
+                    message = "Question added successfully",
+                    questions = questionsList
+                });
             }
             catch (Exception ex)
             {
                 return BadRequest(new { message = ex.Message });
             }
         }
+
+        [HttpGet("get_names")]
+        public ActionResult<List<Person>> GetNames()
+        {
+            var names = _pkg_users.GetNames();
+            if (names == null || !names.Any())
+            {
+                return NotFound();
+            }
+            return Ok(names);
+        }
+
 
 
 
